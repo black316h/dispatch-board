@@ -1,0 +1,19 @@
+# 金鑰 / 本機設定（金鑰請放 Apps Script 指令碼屬性，不要進 git）
+.env
+.env.*
+secrets.*
+*.local.gs
+config.local.*
+
+# clasp（若用 Google clasp 同步 Apps Script，授權檔不要進 git）
+.clasprc.json
+
+# 系統 / 編輯器
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+.claude/
+
+# 套件
+node_modules/

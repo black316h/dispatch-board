@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>派工看板</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#E9EDF1; --surface:#FFFFFF; --ink:#14202B; --muted:#5C6B78;
+    --line:#CDD6DE; --line-soft:#E2E8EE;
+    --blue:#1957A6; --amber:#C77A0A; --amber-bg:#FBEFD6;
+    --led-todo:#9AA8B4; --led-doing:#1957A6; --led-done:#1E8E5A;
+    --p0:#2563EB; --p1:#1E8E5A; --p2:#D9480F; --p3:#7C3AED; --p4:#0E7C8C; --p5:#9A5B12;
+    --radius:12px;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;}
+  body{
+    background:var(--paper); color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans TC","PingFang TC",sans-serif;
+    -webkit-font-smoothing:antialiased; line-height:1.45;
+    padding-bottom:env(safe-area-inset-bottom);
+  }
+  .mono{font-family:"IBM Plex Mono",ui-monospace,monospace;}
+  .wrap{max-width:640px; margin:0 auto;}
+
+  /* nameplate */
+  header{
+    background:var(--ink); color:#EAF0F5;
+    padding:18px 18px 14px; padding-top:calc(18px + env(safe-area-inset-top));
+    border-bottom:3px solid var(--blue);
+  }
+  .plate{display:flex; align-items:center; gap:10px;}
+  .plate .mark{
+    width:14px; height:14px; border-radius:3px;
+    background:var(--blue); box-shadow:0 0 0 3px rgba(25,87,166,.25);
+  }
+  .plate h1{
+    font-family:"Archivo",sans-serif; font-weight:700; font-size:20px;
+    letter-spacing:.04em; margin:0;
+  }
+  .plate .en{
+    font-family:"IBM Plex Mono",monospace; font-size:11px; letter-spacing:.32em;
+    color:#7E93A6; margin-left:auto; text-transform:uppercase;
+  }
+  .meta{
+    display:flex; align-items:center; gap:8px; margin-top:10px;
+    font-family:"IBM Plex Mono",monospace; font-size:12.5px; color:#9DB0C0;
+  }
+  .meta .range{color:#D6E2EC;}
+  .meta button{
+    margin-left:auto; background:transparent; color:#9DB0C0;
+    border:1px solid #33424F; border-radius:7px; padding:4px 10px;
+    font-family:"IBM Plex Mono",monospace; font-size:12px; cursor:pointer;
+  }
+  .meta button:active{background:#1d2a36;}
+
+  /* filter rail */
+  .rail{
+    position:sticky; top:0; z-index:5; background:var(--paper);
+    padding:10px 14px; border-bottom:1px solid var(--line);
+    display:flex; gap:8px; align-items:center; flex-wrap:wrap;
+  }
+  .seg{display:inline-flex; background:var(--surface); border:1px solid var(--line); border-radius:9px; overflow:hidden;}
+  .seg button{
+    border:0; background:transparent; color:var(--muted); cursor:pointer;
+    font-size:13.5px; font-weight:600; padding:7px 13px;
+    font-family:inherit;
+  }
+  .seg button[aria-pressed="true"]{background:var(--ink); color:#fff;}
+  select{
+    margin-left:auto; font-family:inherit; font-size:13.5px; font-weight:600;
+    color:var(--ink); background:var(--surface);
+    border:1px solid var(--line); border-radius:9px; padding:7px 10px;
+  }
+
+  main{padding:6px 14px 40px;}
+
+  /* day divider */
+  .day{
+    display:flex; align-items:baseline; gap:10px; margin:22px 2px 10px;
+  }
+  .day .d{font-family:"IBM Plex Mono",monospace; font-weight:600; font-size:15px; letter-spacing:.01em;}
+  .day .w{font-size:12.5px; color:var(--muted); font-weight:600;}
+  .day .rule{flex:1; height:1px; background:var(--line); margin:0 2px;}
+  .day .today{
+    font-size:11px; font-weight:700; letter-spacing:.04em;
+    color:var(--amber); background:var(--amber-bg);
+    border:1px solid #EAD3A0; padding:2px 8px; border-radius:999px;
+  }
+
+  /* card */
+  .card{
+    position:relative; background:var(--surface); border:1px solid var(--line-soft);
+    border-left:5px solid var(--bar,#999); border-radius:var(--radius);
+    padding:12px 13px 11px 14px; margin:8px 0;
+    box-shadow:0 1px 2px rgba(20,32,43,.04);
+  }
+  .row1{display:flex; align-items:center; gap:8px;}
+  .cust{font-weight:700; font-size:16px; letter-spacing:.01em;}
+  .type{
+    font-size:12px; font-weight:600; color:var(--muted);
+    border:1px solid var(--line); border-radius:6px; padding:1px 7px;
+  }
+  .tag-multi{
+    margin-left:auto; font-family:"IBM Plex Mono",monospace; font-size:11px;
+    font-weight:600; color:var(--blue); background:#E7EFFA;
+    border-radius:6px; padding:2px 7px; white-space:nowrap;
+  }
+  .row2{
+    display:flex; align-items:center; gap:7px 12px; flex-wrap:wrap;
+    margin-top:8px; font-size:13.5px; color:var(--muted);
+  }
+  .who{display:inline-flex; align-items:center; gap:6px; font-weight:600; color:var(--ink);}
+  .dot{width:9px; height:9px; border-radius:50%; background:var(--bar,#999); flex:none;}
+  .loc{display:inline-flex; align-items:center; gap:5px;}
+  .loc svg{flex:none; opacity:.7;}
+  .led{display:inline-flex; align-items:center; gap:6px; font-weight:600; font-size:13px;}
+  .led .b{width:8px; height:8px; border-radius:50%;}
+  .led.todo{color:var(--muted);} .led.todo .b{background:var(--led-todo);}
+  .led.doing{color:var(--led-doing);} .led.doing .b{background:var(--led-doing); box-shadow:0 0 0 3px rgba(25,87,166,.18);}
+  .led.done{color:var(--led-done);} .led.done .b{background:var(--led-done);}
+  .warn{
+    display:inline-flex; align-items:center; gap:5px; font-weight:700; font-size:12.5px;
+    color:var(--amber); background:var(--amber-bg); border:1px solid #EAD3A0;
+    border-radius:6px; padding:2px 8px;
+  }
+  .note{margin-top:7px; font-size:13px; color:var(--muted); line-height:1.4;}
+
+  /* states */
+  .state{
+    background:var(--surface); border:1px solid var(--line-soft); border-radius:var(--radius);
+    padding:22px 18px; margin:24px 2px; color:var(--muted); font-size:14px; line-height:1.6;
+  }
+  .state h2{margin:0 0 8px; font-size:16px; color:var(--ink); font-family:"Archivo",sans-serif;}
+  .state code{font-family:"IBM Plex Mono",monospace; background:var(--paper); padding:1px 6px; border-radius:5px; color:var(--ink); font-size:12.5px;}
+  .state ol{margin:10px 0 0; padding-left:20px;} .state li{margin:6px 0;}
+  .state .hdr{
+    display:grid; grid-template-columns:repeat(8,auto); gap:4px 10px;
+    font-family:"IBM Plex Mono",monospace; font-size:12px; color:var(--ink);
+    background:var(--paper); border-radius:8px; padding:9px 11px; margin-top:10px;
+    overflow-x:auto;
+  }
+  .state .hdr span{white-space:nowrap;}
+  .spin{display:inline-block; width:15px; height:15px; border:2px solid var(--line); border-top-color:var(--blue); border-radius:50%; animation:s .7s linear infinite; vertical-align:-2px; margin-right:8px;}
+  @keyframes s{to{transform:rotate(360deg);}}
+  /* 新增按鈕 + 表單 */
+  .fab{position:fixed; right:18px; bottom:calc(18px + env(safe-area-inset-bottom)); z-index:20;
+    width:54px; height:54px; border-radius:16px; border:0; background:var(--blue); color:#fff;
+    font-size:30px; line-height:1; box-shadow:0 6px 18px rgba(25,87,166,.4); cursor:pointer;}
+  .fab:active{transform:scale(.96);}
+  .modal{position:fixed; inset:0; z-index:30; background:rgba(20,32,43,.45);
+    display:none; align-items:flex-end; justify-content:center;}
+  .modal.open{display:flex;}
+  .dialog{background:var(--surface); width:100%; max-width:640px; border-radius:18px 18px 0 0;
+    padding:18px 16px calc(20px + env(safe-area-inset-bottom)); max-height:92vh; overflow:auto;}
+  .dialog h3{margin:2px 0 14px; font-family:"Archivo",sans-serif; font-size:17px;}
+  .field{margin-bottom:11px;}
+  .field label{display:block; font-size:12.5px; font-weight:600; color:var(--muted); margin-bottom:5px;}
+  .field input, .field select, .field textarea{
+    width:100%; font-family:inherit; font-size:15px; color:var(--ink);
+    border:1px solid var(--line); border-radius:9px; padding:10px 11px; background:#fff;}
+  .field textarea{resize:vertical; min-height:42px;}
+  .two{display:flex; gap:10px;} .two .field{flex:1; min-width:0;}
+  .formhint{font-size:12.5px; color:var(--amber); margin:6px 2px 0; display:none;}
+  .actions{display:flex; gap:10px; margin-top:12px;}
+  .actions button{flex:1; padding:12px; border-radius:11px; font-family:inherit; font-size:15px; font-weight:700; cursor:pointer; border:1px solid var(--line);}
+  .btn-cancel{background:#fff; color:var(--muted);}
+  .btn-save{background:var(--blue); color:#fff; border-color:var(--blue);}
+  .btn-save:disabled{opacity:.6;}
+  @media (prefers-reduced-motion:reduce){ .spin{animation:none;} .fab:active{transform:none;} }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="plate">
+      <span class="mark"></span>
+      <h1>派工看板</h1>
+      <span class="en">Dispatch</span>
+    </div>
+    <div class="meta">
+      <span class="range" id="weekRange">—</span>
+      <span id="updated"></span>
+      <button id="refresh" type="button">重新整理</button>
+    </div>
+  </header>
+
+  <div class="rail">
+    <div class="seg" id="scope">
+      <button data-scope="today" type="button">今天</button>
+      <button data-scope="week" type="button" aria-pressed="true">本週</button>
+      <button data-scope="all" type="button">全部</button>
+    </div>
+    <select id="person"><option value="">全部人員</option></select>
+  </div>
+
+  <main id="board"></main>
+
+  <button class="fab" id="fab" type="button" aria-label="新增派工">＋</button>
+  <div class="modal" id="modal" aria-hidden="true">
+    <div class="dialog" role="dialog" aria-label="新增派工">
+      <h3>新增派工</h3>
+      <div class="two">
+        <div class="field"><label>日期</label><input id="f-date" type="date"></div>
+        <div class="field"><label>結束日（多日才填）</label><input id="f-end" type="date"></div>
+      </div>
+      <div class="field"><label>客戶</label><input id="f-cust" placeholder="客戶A 或 A公司"></div>
+      <div class="field"><label>地點</label><input id="f-loc" placeholder="台中 / 廠區"></div>
+      <div class="two">
+        <div class="field"><label>類型</label><input id="f-type" list="types" placeholder="維修"></div>
+        <div class="field"><label>負責人</label><input id="f-who" placeholder="阿明"></div>
+      </div>
+      <datalist id="types"><option>維修</option><option>配線</option><option>安裝</option><option>調機</option><option>試車</option></datalist>
+      <div class="field"><label>狀態</label>
+        <select id="f-status"><option>待辦</option><option>進行中</option><option>完成</option></select>
+      </div>
+      <div class="field"><label>備註</label><textarea id="f-note" placeholder="變頻器跳脫…"></textarea></div>
+      <div class="formhint" id="formhint"></div>
+      <div class="actions">
+        <button class="btn-cancel" id="f-cancel" type="button">取消</button>
+        <button class="btn-save" id="f-save" type="button">新增</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ============================================================
+   設定區 —— 只要改這一行
+   1) Google Sheet：檔案 → 共用 → 發布到網路 → 選你的工作表 →
+      格式選「逗號分隔值 (.csv)」→ 發布 → 複製連結貼到下面。
+   2) 第一列（標題）請用這幾個欄名：
+      日期 結束 客戶 地點 類型 負責人 狀態 備註
+      （只有 日期 / 客戶 / 負責人 是必填，其它可留空）
+      日期格式：2026-06-15 或 2026/6/15 都可；單日就把「結束」留空。
+      狀態：待辦 / 進行中 / 完成
+   ============================================================ */
+const SHEET_CSV_URL = "";   // ← 貼上你的 CSV 連結（讀取用）
+const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxj4zz29h8tTn8sxwv7Je2BDim6PkneiEHgdCQUO51KzJ88Wfmh2Y_qiT8J8mJeb-7FMw/exec";  // ← Apps Script /exec（clasp 部署，跟 LINE 同一支）
+const AUTO_REFRESH_MS = 5 * 60 * 1000;
+
+const PERSON_COLORS = ["--p0","--p1","--p2","--p3","--p4","--p5"]
+  .map(v => getComputedStyle(document.documentElement).getPropertyValue(v).trim());
+
+const board = document.getElementById('board');
+const updatedEl = document.getElementById('updated');
+const weekRangeEl = document.getElementById('weekRange');
+const personSel = document.getElementById('person');
+let state = { scope:'week', person:'', jobs:[] };
+
+/* ---- 日期工具（一律取當地午夜，方便比日期）---- */
+function dOnly(y,m,d){ return new Date(y, m, d); }
+function today(){ const n=new Date(); return dOnly(n.getFullYear(), n.getMonth(), n.getDate()); }
+function parseDate(s){
+  if(!s) return null; s=String(s).trim();
+  let m = s.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/);
+  if(m) return dOnly(+m[1], +m[2]-1, +m[3]);
+  m = s.match(/^(\d{1,2})[-/.](\d{1,2})$/);
+  if(m) return dOnly(today().getFullYear(), +m[1]-1, +m[2]);
+  const d=new Date(s); return isNaN(d) ? null : dOnly(d.getFullYear(), d.getMonth(), d.getDate());
+}
+const WD=['日','一','二','三','四','五','六'];
+function fmt(d){ return `${d.getMonth()+1}/${d.getDate()}`; }
+function fmtFull(d){ return `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}`; }
+function addDays(d,n){ return dOnly(d.getFullYear(), d.getMonth(), d.getDate()+n); }
+function weekStart(d){ const wd=(d.getDay()+6)%7; return addDays(d,-wd); } // 週一為首
+function sameDay(a,b){ return a.getTime()===b.getTime(); }
+function overlap(a,b){ return a.start<=b.end && b.start<=a.end; }
+
+/* ---- CSV 解析（自己寫，支援引號內逗號/換行）---- */
+function parseCSV(t){
+  const rows=[]; let row=[], f='', q=false, i=0;
+  while(i<t.length){
+    const c=t[i];
+    if(q){
+      if(c==='"'){ if(t[i+1]==='"'){f+='"'; i+=2; continue;} q=false; i++; continue; }
+      f+=c; i++; continue;
+    }
+    if(c==='"'){ q=true; i++; continue; }
+    if(c===','){ row.push(f); f=''; i++; continue; }
+    if(c==='\r'){ i++; continue; }
+    if(c==='\n'){ row.push(f); rows.push(row); row=[]; f=''; i++; continue; }
+    f+=c; i++;
+  }
+  if(f!=='' || row.length){ row.push(f); rows.push(row); }
+  return rows;
+}
+
+function rowsToJobs(rows){
+  if(!rows.length) return [];
+  const head = rows[0].map(h=>h.trim());
+  const idx = name => head.indexOf(name);
+  const c = { date:idx('日期'), end:idx('結束'), cust:idx('客戶'), loc:idx('地點'),
+              type:idx('類型'), who:idx('負責人'), st:idx('狀態'), note:idx('備註') };
+  const jobs=[];
+  for(let r=1;r<rows.length;r++){
+    const row=rows[r]; if(!row || row.every(x=>!String(x).trim())) continue;
+    const get=k=> c[k]>=0 ? String(row[c[k]]??'').trim() : '';
+    const start=parseDate(get('date')); if(!start) continue;
+    const end=parseDate(get('end')) || start;
+    jobs.push({
+      start, end, cust:get('cust')||'（未填客戶）', loc:get('loc'),
+      type:get('type'), who:get('who')||'未指派',
+      status:get('st'), note:get('note'),
+      multi: end.getTime()>start.getTime()
+    });
+  }
+  // 衝突：同一負責人、日期區間重疊
+  for(let a=0;a<jobs.length;a++) for(let b=a+1;b<jobs.length;b++){
+    if(jobs[a].who===jobs[b].who && jobs[a].who!=='未指派' && overlap(jobs[a],jobs[b])){
+      jobs[a].conflict=true; jobs[b].conflict=true;
+    }
+  }
+  return jobs;
+}
+
+/* ---- 人員配色（依出現順序穩定指派）---- */
+const colorMap={}; let colorN=0;
+function personColor(name){
+  if(!(name in colorMap)) colorMap[name]=PERSON_COLORS[colorN++ % PERSON_COLORS.length];
+  return colorMap[name];
+}
+
+function statusClass(s){
+  if(s.includes('完成')) return ['done','完成'];
+  if(s.includes('進行')) return ['doing','進行中'];
+  return ['todo', s||'待辦'];
+}
+
+const pinSVG='<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 21s-7-5.5-7-11a7 7 0 0 1 14 0c0 5.5-7 11-7 11z"/><circle cx="12" cy="10" r="2.4"/></svg>';
+
+function renderPeople(jobs){
+  const cur=personSel.value;
+  const names=[...new Set(jobs.map(j=>j.who))].sort();
+  personSel.innerHTML='<option value="">全部人員</option>'+
+    names.map(n=>`<option value="${n}">${n}</option>`).join('');
+  personSel.value=cur;
+}
+
+function render(){
+  const t=today();
+  const ws=weekStart(t), we=addDays(ws,6);
+  weekRangeEl.textContent=`本週 ${fmt(ws)}–${fmt(we)}`;
+
+  let jobs=state.jobs.slice();
+  if(state.person) jobs=jobs.filter(j=>j.who===state.person);
+  if(state.scope==='today') jobs=jobs.filter(j=> j.start<=t && t<=j.end);
+  else if(state.scope==='week') jobs=jobs.filter(j=> j.start<=we && ws<=j.end);
+
+  jobs.sort((a,b)=> a.start-b.start || a.who.localeCompare(b.who));
+
+  if(!jobs.length){
+    const msg = state.scope==='today' ? '今天沒有派工。' :
+                state.scope==='week' ? '本週沒有派工。' : '目前沒有派工資料。';
+    board.innerHTML=`<div class="state"><h2>空的</h2>${msg}換個範圍或人員看看，或到 Google Sheet 新增一列。</div>`;
+    return;
+  }
+
+  // 依「起始日」分組
+  const groups=new Map();
+  for(const j of jobs){
+    const key=j.start.getTime();
+    if(!groups.has(key)) groups.set(key,[]);
+    groups.get(key).push(j);
+  }
+
+  let html='';
+  for(const [key,list] of [...groups.entries()].sort((a,b)=>a[0]-b[0])){
+    const d=new Date(key);
+    const isToday=sameDay(d,t);
+    html+=`<div class="day"><span class="d mono">${fmt(d)}</span><span class="w">週${WD[d.getDay()]}</span><span class="rule"></span>${isToday?'<span class="today">● 今天</span>':''}</div>`;
+    for(const j of list){
+      const col=`var(${personColor(j.who)})`;
+      const [sc,sl]=statusClass(j.status);
+      html+=`<div class="card" style="--bar:${col}">
+        <div class="row1">
+          <span class="cust">${esc(j.cust)}</span>
+          ${j.type?`<span class="type">${esc(j.type)}</span>`:''}
+          ${j.multi?`<span class="tag-multi">多日 ${fmt(j.start)}–${fmt(j.end)}</span>`:''}
+        </div>
+        <div class="row2">
+          <span class="who"><span class="dot"></span>${esc(j.who)}</span>
+          ${j.loc?`<span class="loc">${pinSVG}${esc(j.loc)}</span>`:''}
+          <span class="led ${sc}"><span class="b"></span>${esc(sl)}</span>
+          ${j.conflict?'<span class="warn">⚠ 衝突</span>':''}
+        </div>
+        ${j.note?`<div class="note">${esc(j.note)}</div>`:''}
+      </div>`;
+    }
+  }
+  board.innerHTML=html;
+}
+
+function esc(s){ return String(s).replace(/[&<>"]/g, m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m])); }
+
+function setupScreen(){
+  board.innerHTML=`<div class="state">
+    <h2>還沒接上資料</h2>
+    打開 <code>index.html</code>，把上方 <code>SHEET_CSV_URL</code> 改成你的 Google Sheet「發布成 CSV」連結就會自動顯示。
+    <ol>
+      <li>Google Sheet → <b>檔案 → 共用 → 發布到網路</b></li>
+      <li>選你的工作表，格式選 <b>逗號分隔值 (.csv)</b>，按發布</li>
+      <li>複製連結，貼進 <code>SHEET_CSV_URL = "…"</code></li>
+    </ol>
+    第一列（標題）用這幾欄（只有 日期/客戶/負責人 必填）：
+    <div class="hdr"><span>日期</span><span>結束</span><span>客戶</span><span>地點</span><span>類型</span><span>負責人</span><span>狀態</span><span>備註</span></div>
+  </div>`;
+}
+
+async function load(){
+  if(!SHEET_CSV_URL){ setupScreen(); return; }
+  board.innerHTML=`<div class="state"><span class="spin"></span>讀取派工資料中…</div>`;
+  try{
+    const res=await fetch(SHEET_CSV_URL, {cache:'no-store'});
+    if(!res.ok) throw new Error('HTTP '+res.status);
+    const text=await res.text();
+    state.jobs=rowsToJobs(parseCSV(text));
+    renderPeople(state.jobs);
+    render();
+    const n=new Date();
+    updatedEl.textContent=`· 更新 ${String(n.getHours()).padStart(2,'0')}:${String(n.getMinutes()).padStart(2,'0')}`;
+  }catch(err){
+    board.innerHTML=`<div class="state"><h2>讀不到資料</h2>
+      連到 Google Sheet 失敗（${esc(err.message)}）。請檢查：
+      <ol>
+        <li>那張表是否已用「發布到網路 → CSV」發布</li>
+        <li><code>SHEET_CSV_URL</code> 是否貼的是 CSV 連結（網址含 <code>output=csv</code>）</li>
+        <li>手機是否有連上網路</li>
+      </ol>
+    </div>`;
+  }
+}
+
+/* ---- 事件 ---- */
+document.getElementById('scope').addEventListener('click', e=>{
+  const b=e.target.closest('button'); if(!b) return;
+  state.scope=b.dataset.scope;
+  [...e.currentTarget.children].forEach(x=>x.setAttribute('aria-pressed', x===b));
+  render();
+});
+personSel.addEventListener('change', e=>{ state.person=e.target.value; render(); });
+document.getElementById('refresh').addEventListener('click', load);
+/* ---- 新增派工表單 ---- */
+const modal=document.getElementById('modal');
+const hint=document.getElementById('formhint');
+const $=id=>document.getElementById(id);
+function openModal(){
+  hint.style.display='none';
+  $('f-date').value = new Date().toISOString().slice(0,10);
+  modal.classList.add('open'); modal.setAttribute('aria-hidden','false');
+}
+function closeModal(){ modal.classList.remove('open'); modal.setAttribute('aria-hidden','true'); }
+$('fab').addEventListener('click', openModal);
+$('f-cancel').addEventListener('click', closeModal);
+modal.addEventListener('click', e=>{ if(e.target===modal) closeModal(); });
+
+$('f-save').addEventListener('click', async ()=>{
+  const v=id=>$(id).value.trim();
+  if(!v('f-date') || !v('f-cust')){ hint.textContent='「日期」和「客戶」要填。'; hint.style.display='block'; return; }
+  if(!APPS_SCRIPT_URL){ hint.textContent='還沒設定 APPS_SCRIPT_URL，無法寫入。請先在檔案最上面貼上 /exec 網址。'; hint.style.display='block'; return; }
+  const btn=$('f-save'); btn.disabled=true; btn.textContent='新增中…';
+  const fd=new FormData();
+  fd.append('date',v('f-date'));   fd.append('end',v('f-end'));
+  fd.append('cust',v('f-cust'));   fd.append('loc',v('f-loc'));
+  fd.append('type',v('f-type'));   fd.append('who',v('f-who')||'未指派');
+  fd.append('status',v('f-status'));fd.append('note',v('f-note'));
+  try{
+    await fetch(APPS_SCRIPT_URL, { method:'POST', body:fd, mode:'no-cors' });
+    closeModal();
+    ['f-end','f-cust','f-loc','f-type','f-who','f-note'].forEach(id=>$(id).value='');
+    board.innerHTML=`<div class="state"><span class="spin"></span>已送出，更新看板中…</div>`;
+    setTimeout(load, 2000);
+  }catch(err){
+    hint.textContent='送出失敗，檢查網路或 APPS_SCRIPT_URL。'; hint.style.display='block';
+  }finally{ btn.disabled=false; btn.textContent='新增'; }
+});
+
+setInterval(load, AUTO_REFRESH_MS);
+
+load();
+</script>
+</body>
+</html>
