@@ -44,6 +44,30 @@ function doPost(e) {
 
 function doGet() { return ok_('alive'); }
 
+/* === 一次性設定：建立試算表＋設定 SHEET_ID/SHEET_NAME（不含金鑰）===
+ * 首次部署時在編輯器選 setup → 執行 → 授權。之後可刪。
+ * 金鑰（GEMINI_KEY / LINE_TOKEN）請另外貼到「指令碼屬性」。
+ */
+function setup() {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('SHEET_ID')) {
+    Logger.log('已設定過 SHEET_ID，略過建表。現有 = ' + props.getProperty('SHEET_ID'));
+    return '已設定過，未重複建表';
+  }
+  const ss = SpreadsheetApp.create('派工資料');
+  const sh = ss.getSheets()[0];
+  sh.setName('工作表1');
+  sh.getRange(1, 1, 1, 8).setValues([[
+    '日期', '結束', '客戶', '地點', '類型', '負責人', '狀態', '備註'
+  ]]);
+  sh.setFrozenRows(1);
+  props.setProperty('SHEET_ID', ss.getId());
+  props.setProperty('SHEET_NAME', '工作表1');
+  Logger.log('SHEET_ID = ' + ss.getId());
+  Logger.log('URL = ' + ss.getUrl());
+  return ss.getUrl();
+}
+
 function ok_(msg) {
   return ContentService.createTextOutput(JSON.stringify({ ok: true, msg: msg || '' }))
     .setMimeType(ContentService.MimeType.JSON);
