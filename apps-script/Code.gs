@@ -24,25 +24,40 @@ function cfg_(key, required) {
   return v || '';
 }
 
-/* === 入口：LINE 和 網頁新增都打這支 === */
+/* === 入口：LINE 和 網頁（新增/編輯/刪除）都打這支 === */
 function doPost(e) {
+  const lock = LockService.getScriptLock();
   try {
     let body = null;
     if (e.postData && /json/.test(e.postData.type || '')) body = JSON.parse(e.postData.contents);
+    lock.waitLock(10000);
     if (body && body.events) { handleLine(body); return ok_(); }   // 來自 LINE
     const f = e.parameter || {};                                    // 來自網頁表單
+    if (f.action === 'update') { updateJob(f); return ok_(); }
+    if (f.action === 'delete') { deleteJob(f); return ok_(); }
+    if (!f.date && !f.cust) throw new Error('缺少必要欄位（日期/客戶）');
     appendJob({
       date: f.date, end: f.end, cust: f.cust, loc: f.loc,
       type: f.type, who: f.who, status: f.status || '待辦', note: f.note
     });
     return ok_();
   } catch (err) {
-    return ContentService.createTextOutput(JSON.stringify({ ok: false, error: String(err) }))
+    return ContentService.createTextOutput(JSON.stringify({ ok: false, error: String((err && err.message) || err) }))
       .setMimeType(ContentService.MimeType.JSON);
+  } finally {
+    try { lock.releaseLock(); } catch (_) {}
   }
 }
 
-function doGet() { return ok_('alive'); }
+/* GET ?action=list → 全部派工 JSON（看板即時讀取用，無發布 CSV 的快取延遲） */
+function doGet(e) {
+  const p = (e && e.parameter) || {};
+  if (p.action === 'list') {
+    return ContentService.createTextOutput(JSON.stringify({ ok: true, jobs: listJobs() }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+  return ok_('alive');
+}
 
 /* === 一次性設定：建立試算表＋設定 SHEET_ID/SHEET_NAME（不含金鑰）===
  * 首次部署時在編輯器選 setup → 執行 → 授權。之後可刪。
@@ -86,11 +101,21 @@ function handleLine(body) {
   });
 }
 
-/* === 解析：先用雲端 Gemini，失敗才退回規則解析 === */
+/* === 解析：先用雲端 Gemini；缺的欄位用規則解析補，兩邊互補 === */
 function parseJob(text) {
   const ai = parseWithGemini(text);
-  if (ai && ai.date) return ai;
-  return parseText(text);
+  const rb = parseText(text);
+  if (ai && ai.date) {
+    if (rb) {
+      if ((!ai.who || ai.who === '未指派') && rb.who && rb.who !== '未指派') ai.who = rb.who;
+      if (!ai.cust && rb.cust) ai.cust = rb.cust;
+      if (!ai.type && rb.type) ai.type = rb.type;
+      if (!ai.loc && rb.loc) ai.loc = rb.loc;
+      if (!ai.end && rb.end) ai.end = rb.end;
+    }
+    return ai;
+  }
+  return rb;
 }
 
 function parseWithGemini(text) {
@@ -104,7 +129,8 @@ function parseWithGemini(text) {
     '從這句話抽出欄位，只輸出 JSON，不要任何說明或程式碼框：\n' +
     '{"date":"YYYY-MM-DD","end":"YYYY-MM-DD 或空字串","cust":"客戶","type":"類型","who":"負責人","loc":"地點"}\n' +
     '規則：date 是開始日；單日 end 給空字串；看得懂「今天/明天/後天/下週三」等相對日期；\n' +
-    '抓不到的欄位給空字串；type 例如 維修/配線/安裝/調機/試車。\n句子：' + text;
+    '抓不到的欄位給空字串；type 例如 維修/配線/安裝/調機/試車；\n' +
+    '句尾單獨出現的稱呼或人名（如 阿明、阿華、小王、老陳）通常就是負責人 who，務必抓出來。\n句子：' + text;
   try {
     const res = UrlFetchApp.fetch(
       'https://generativelanguage.googleapis.com/v1beta/models/' + GEMINI_MODEL + ':generateContent',
@@ -161,16 +187,67 @@ function normDate(s) {
   return '';
 }
 
-/* === 寫入 Sheet === */
-function appendJob(j) {
+/* === Sheet 存取 === */
+const COL = { date: 1, end: 2, cust: 3, loc: 4, type: 5, who: 6, status: 7, note: 8 };
+
+function sheet_() {
   const ss = SpreadsheetApp.openById(cfg_('SHEET_ID', true));
   const name = cfg_('SHEET_NAME') || '工作表1';
   const sh = ss.getSheetByName(name);
   if (!sh) throw new Error('找不到分頁：' + name);
-  sh.appendRow([
+  return sh;
+}
+
+function appendJob(j) {
+  sheet_().appendRow([
     j.date || '', j.end || '', j.cust || '', j.loc || '',
     j.type || '', j.who || '未指派', j.status || '待辦', j.note || ''
   ]);
+}
+
+function listJobs() {
+  const vals = sheet_().getDataRange().getValues();
+  const jobs = [];
+  for (let r = 1; r < vals.length; r++) {
+    const v = vals[r];
+    const date = cell_(v[0]);
+    if (!date && !cell_(v[2])) continue;   // 全空列跳過
+    jobs.push({
+      row: r + 1,
+      date: date, end: cell_(v[1]), cust: cell_(v[2]), loc: cell_(v[3]),
+      type: cell_(v[4]), who: cell_(v[5]), status: cell_(v[6]), note: cell_(v[7])
+    });
+  }
+  return jobs;
+}
+
+/* 日期儲存格可能是 Date 物件或字串，一律轉成 yyyy-MM-dd 字串 */
+function cell_(v) {
+  if (v instanceof Date) return Utilities.formatDate(v, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+  return String(v == null ? '' : v).trim();
+}
+
+/* 更新/刪除：row 是 Sheet 列號；guard（客戶名）用來確認列沒被動過，避免刪錯 */
+function updateJob(f) {
+  const sh = sheet_();
+  const row = rowOf_(sh, f);
+  Object.keys(COL).forEach(function (k) {
+    if (f[k] !== undefined) sh.getRange(row, COL[k]).setValue(f[k]);
+  });
+}
+
+function deleteJob(f) {
+  const sh = sheet_();
+  sh.deleteRow(rowOf_(sh, f));
+}
+
+function rowOf_(sh, f) {
+  const row = parseInt(f.row, 10);
+  if (!row || row < 2 || row > sh.getLastRow()) throw new Error('該列不存在，請重新整理看板後再試');
+  if (f.guard !== undefined && cell_(sh.getRange(row, COL.cust).getValue()) !== String(f.guard).trim()) {
+    throw new Error('看板資料已過期（該列已被修改或移動），請重新整理後再試');
+  }
+  return row;
 }
 
 /* === LINE 回覆（reply 不吃推播額度）=== */

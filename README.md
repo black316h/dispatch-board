@@ -5,14 +5,15 @@
 ## 架構
 
 ```
-LINE 打字 ─────┐
-               ├──→ Apps Script（免費後端）──→ Google Sheet ──讀──→ GitHub Pages 看板
-網頁「＋新增」──┘
+LINE 打字 ──────────┐
+                    ├──→ Apps Script（免費後端）──→ Google Sheet
+網頁 新增/編輯/刪除 ──┘         ↑
+GitHub Pages 看板 ──讀 JSON ────┘
 ```
 
 - **Google Sheet** — 資料庫，所有派工都是一列。
-- **Apps Script** — 免費後端，接 LINE webhook 與網頁新增，負責解析、寫入。LINE 文字用雲端 Gemini 解析（免逗號、聽得懂相對日期）；失敗會自動退回規則解析。
-- **GitHub Pages** — 只負責顯示（唯讀），讀 Sheet 發布的 CSV。
+- **Apps Script** — 免費後端：接 LINE webhook 與網頁的新增/編輯/刪除，並提供 `?action=list` 即時 JSON 給看板讀。LINE 文字用雲端 Gemini 解析（免逗號、聽得懂相對日期），缺欄位自動用規則解析補。
+- **GitHub Pages** — 看板頁面。點卡片可編輯/刪除/改狀態，手機電腦通用。
 
 > 這層註定是雲端的：LINE 要從公網送訊息進來，後端不能放在 air-gapped 內網。內部 CAD／庫存維持離線，只有「誰去哪」這層上雲。
 
@@ -39,7 +40,7 @@ dispatch/
 ### A. Google Sheet
 1. 新增一張試算表，第一列標題照欄序：`日期  結束  客戶  地點  類型  負責人  狀態  備註`
 2. 記下網址 `/d/` 後面那串 = **SHEET_ID**。
-3. 檔案 → 共用 → **發布到網路** → 選工作表、格式 **CSV** → 發布 → 複製連結（給 index.html 用）。
+3. （可省略）檔案 → 共用 → **發布到網路** → 選工作表、格式 **CSV** → 發布 → 複製連結。看板現在直接讀 Apps Script 的即時 JSON，CSV 只是沒填 `APPS_SCRIPT_URL` 時的唯讀備援。
 
 ### B. Apps Script（後端）
 1. 到 <https://script.new>，把 `apps-script/Code.gs` 內容貼進去。
@@ -60,9 +61,9 @@ dispatch/
 4. 用 QR code 把這個官方帳號加為好友。
 
 ### D. GitHub Pages（前端）
-1. 編輯 `index.html` 最上面兩行：
-   - `SHEET_CSV_URL` = A 步驟的 CSV 連結
-   - `APPS_SCRIPT_URL` = B 步驟的 `…/exec` 網址
+1. 編輯 `index.html` 設定區：
+   - `APPS_SCRIPT_URL` = B 步驟的 `…/exec` 網址（讀＋寫都走這個）
+   - `SHEET_CSV_URL` = A 步驟的 CSV 連結（備援，可留空）
 2. 推上 GitHub，Settings → Pages 開啟，網址給技師。
 
 ## Sheet 欄位
