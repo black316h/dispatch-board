@@ -52,11 +52,35 @@ function doPost(e) {
 /* GET ?action=list → 全部派工 JSON（看板即時讀取用，無發布 CSV 的快取延遲） */
 function doGet(e) {
   const p = (e && e.parameter) || {};
-  if (p.action === 'list') {
-    return ContentService.createTextOutput(JSON.stringify({ ok: true, jobs: listJobs() }))
+  try {
+    if (p.action === 'list') {
+      return ContentService.createTextOutput(JSON.stringify({ ok: true, jobs: listJobs() }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+    if (p.action === 'health') return health_();
+    return ok_('alive');
+  } catch (err) {
+    return ContentService.createTextOutput(JSON.stringify({ ok: false, error: String((err && err.message) || err) }))
       .setMimeType(ContentService.MimeType.JSON);
   }
-  return ok_('alive');
+}
+
+/* 健康檢查：只回報各設定「有沒有貼」與 Gemini 是否真的可用，不洩漏金鑰內容 */
+function health_() {
+  const r = {
+    ok: true,
+    sheet_id: !!cfg_('SHEET_ID'),
+    sheet_name: cfg_('SHEET_NAME') || '(預設 工作表1)',
+    line_token: !!cfg_('LINE_TOKEN'),
+    gemini_key: !!cfg_('GEMINI_KEY'),
+    gemini_works: false
+  };
+  if (r.gemini_key) {
+    const t = parseWithGemini('明天 測試客戶 維修 阿明');
+    r.gemini_works = !!(t && t.date);
+  }
+  return ContentService.createTextOutput(JSON.stringify(r))
+    .setMimeType(ContentService.MimeType.JSON);
 }
 
 /* === 一次性設定：建立試算表＋設定 SHEET_ID/SHEET_NAME（不含金鑰）===
