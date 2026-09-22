@@ -436,15 +436,29 @@ function setupScreen(){
   </div>`;
 }
 
+/* GET 讀取專用：非 JSON / 非 2xx 就隔一下再試（只用在讀取，寫入不自動重送以免重複） */
+async function fetchJSON(url, opts, tries){
+  for(let i=0;;i++){
+    const ac=new AbortController();
+    const timer=setTimeout(()=>ac.abort(), 12000);   // 偶爾整個懸住 → 逾時後重試
+    try{
+      const res=await fetch(url, Object.assign({}, opts, {signal:ac.signal}));
+      if(!res.ok) throw new Error('HTTP '+res.status);
+      return await res.json();
+    }catch(err){
+      if(i>=(tries||2)-1) throw (err.name==='AbortError' ? new Error('後端沒有回應（逾時）') : err);
+      await new Promise(r=>setTimeout(r, 900));
+    }finally{ clearTimeout(timer); }
+  }
+}
+
 async function load(){
   if(!APPS_SCRIPT_URL && !SHEET_CSV_URL){ setupScreen(); return; }
   if(!state.jobs.length) board.innerHTML=`<div class="state"><span class="spin"></span>讀取派工資料中…</div>`;
   try{
     if(APPS_SCRIPT_URL){
-      // 即時 JSON（無發布 CSV 的快取延遲，且帶列號可編輯）
-      const res=await fetch(APPS_SCRIPT_URL+'?action=list&t='+Date.now(), {cache:'no-store'});
-      if(!res.ok) throw new Error('HTTP '+res.status);
-      const data=await res.json();
+      // 即時 JSON（無發布 CSV 的快取延遲，且帶列號可編輯）；Apps Script 偶發轉址抖動 → 自動重試
+      const data=await fetchJSON(APPS_SCRIPT_URL+'?action=list&t='+Date.now(), {cache:'no-store'}, 3);
       if(!data.ok) throw new Error(data.error||'後端回傳錯誤');
       state.jobs=jobsFromApi(data.jobs);
     }else{
@@ -540,7 +554,9 @@ $('f-save').addEventListener('click', async ()=>{
     closeModal();
     await load();
   }catch(err){
-    hint.textContent='送出失敗：'+err.message; hint.style.display='block';
+    // 可能是後端已寫入但回應途中抖動：先刷新背後的看板，讓使用者確認再決定要不要重送
+    hint.textContent='送出可能未成功（'+err.message+'）。請先看看板有沒有出現這筆，再決定要不要重送。'; hint.style.display='block';
+    load();
   }finally{ btn.disabled=false; btn.textContent=editing?'儲存':'新增'; }
 });
 
@@ -555,7 +571,8 @@ $('f-del').addEventListener('click', async ()=>{
     closeModal();
     await load();
   }catch(err){
-    hint.textContent='刪除失敗：'+err.message; hint.style.display='block';
+    hint.textContent='刪除可能未成功（'+err.message+'）。請先看看板，再決定要不要重試。'; hint.style.display='block';
+    load();
   }finally{ btn.disabled=false; btn.textContent='刪除'; }
 });
 
