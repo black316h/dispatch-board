@@ -455,12 +455,22 @@ async function fetchJSON(url, opts, tries){
 async function load(){
   if(!APPS_SCRIPT_URL && !SHEET_CSV_URL){ setupScreen(); return; }
   if(!state.jobs.length) board.innerHTML=`<div class="state"><span class="spin"></span>讀取派工資料中…</div>`;
+  let viaBackup=false;
   try{
     if(APPS_SCRIPT_URL){
-      // 即時 JSON（無發布 CSV 的快取延遲，且帶列號可編輯）；Apps Script 偶發轉址抖動 → 自動重試
-      const data=await fetchJSON(APPS_SCRIPT_URL+'?action=list&t='+Date.now(), {cache:'no-store'}, 3);
-      if(!data.ok) throw new Error(data.error||'後端回傳錯誤');
-      state.jobs=jobsFromApi(data.jobs);
+      try{
+        // 即時 JSON（無發布 CSV 的快取延遲，且帶列號可編輯）；Apps Script 偶發轉址抖動 → 自動重試
+        const data=await fetchJSON(APPS_SCRIPT_URL+'?action=list&t='+Date.now(), {cache:'no-store'}, 4);
+        if(!data.ok) throw new Error(data.error||'後端回傳錯誤');
+        state.jobs=jobsFromApi(data.jobs);
+      }catch(err){
+        if(!SHEET_CSV_URL) throw err;
+        // 後端連續失敗 → 退回讀發布的 CSV（唯讀、可能延遲數分鐘），至少看得到班表
+        const res=await fetch(SHEET_CSV_URL+(SHEET_CSV_URL.includes('?')?'&':'?')+'t='+Date.now(), {cache:'no-store'});
+        if(!res.ok) throw err;
+        state.jobs=rowsToJobs(parseCSV(await res.text()));
+        viaBackup=true;
+      }
     }else{
       const res=await fetch(SHEET_CSV_URL, {cache:'no-store'});
       if(!res.ok) throw new Error('HTTP '+res.status);
@@ -469,7 +479,8 @@ async function load(){
     renderPeople(state.jobs);
     render();
     const n=new Date();
-    updatedEl.textContent=`· 更新 ${String(n.getHours()).padStart(2,'0')}:${String(n.getMinutes()).padStart(2,'0')}`;
+    updatedEl.textContent=`· 更新 ${String(n.getHours()).padStart(2,'0')}:${String(n.getMinutes()).padStart(2,'0')}`
+      + (viaBackup ? '（備援·延遲·唯讀）' : '');
   }catch(err){
     board.innerHTML=`<div class="state"><h2>讀不到資料</h2>
       連到後端失敗（${esc(err.message)}）。請檢查：
